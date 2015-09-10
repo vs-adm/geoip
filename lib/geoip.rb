@@ -119,7 +119,7 @@ class GeoIP
     LARGE_COUNTRY = 17
     LARGE_COUNTRY_V6 = 18
     CITYCONFIDENCEDIST_ISP_ORG = 19 # unused, but gaps are not allowed
-    CCM_COUNTRY = 20                # unused, but gaps are not allowed 
+    CCM_COUNTRY = 20                # unused, but gaps are not allowed
     ASNUM_V6 = 21
     ISP_V6 = 22
     ORG_V6 = 23
@@ -451,7 +451,7 @@ class GeoIP
   #
   alias_method(:organization, :isp)  # Untested, according to Maxmind docs this should work
 
-  # Iterate through a GeoIP city database by 
+  # Iterate through a GeoIP city database by
   def each
     return enum_for unless block_given?
 
@@ -464,6 +464,27 @@ class GeoIP
     num = 0
 
     until ((rec = read_city(@iter_pos)).nil?)
+      yield rec
+      print "#{num}: #{@iter_pos}\n" if((num += 1) % 1000 == 0)
+    end
+
+    @iter_pos = nil
+    return self
+  end
+
+  # Iterate through a GeoIP city database by
+  def each_by_asn
+    return enum_for unless block_given?
+
+    if (@database_type != Edition::ASNUM &&
+        @database_type != Edition::ASNUM_V6)
+      throw "Invalid GeoIP database type, can't iterate thru non-ASN database"
+    end
+
+    @iter_pos = @database_segments[0] + 1
+    num = 0
+
+    until ((rec = read_asn(@iter_pos)).nil?)
       yield rec
       print "#{num}: #{@iter_pos}\n" if((num += 1) % 1000 == 0)
     end
@@ -487,7 +508,7 @@ class GeoIP
     off1 = le_to_ui(record1.unpack('C*'))
     val = off1 - @database_segments[0]
     if val >= 0
-      yield(ipnum, val > 0 ? read_record(ipnum.to_s, ipnum, val) : nil) 
+      yield(ipnum, val > 0 ? read_record(ipnum.to_s, ipnum, val) : nil)
     elsif mask != 0
       each_by_ip(off1, ipnum, mask >> 1, &callback)
     end
@@ -707,6 +728,8 @@ class GeoIP
     return nil if offset == 0
     record = atomic_read(MAX_ASN_RECORD_LENGTH, index_size+offset)
     record.slice!(record.index("\0")..-1)
+
+    @iter_pos += record.size unless @iter_pos.nil?
 
     # AS####, Description
     # REVISIT: Text is in Latin-1 (ISO8859-1)
