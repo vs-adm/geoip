@@ -441,6 +441,10 @@ class GeoIP
     read_asn(pos-@database_segments[0])
   end
 
+  def asn_info(as_num)
+    asn_hash[as_num]
+  end
+
   # Search a ISP GeoIP database for the specified host, returning the
   # organization.
   #
@@ -481,16 +485,31 @@ class GeoIP
       throw "Invalid GeoIP database type, can't iterate thru non-ASN database"
     end
 
-    @iter_pos = @database_segments[0] + 1
+    @iter_pos = 1
     num = 0
 
     until ((rec = read_asn(@iter_pos)).nil?)
       yield rec
-      print "#{num}: #{@iter_pos}\n" if((num += 1) % 1000 == 0)
     end
 
     @iter_pos = nil
     return self
+  end
+
+  def asn_hash
+    @asn_hash ||= begin
+      _res = {}
+
+      each_by_asn do |asn|
+        if asn.kind_of?(String)
+          _res[asn] = asn
+        elsif asn.kind_of?(Struct)
+          _res[asn.number] = asn
+        end
+      end
+
+      _res
+    end
   end
 
   # Call like this, for example:
@@ -727,9 +746,12 @@ class GeoIP
   def read_asn offset
     return nil if offset == 0
     record = atomic_read(MAX_ASN_RECORD_LENGTH, index_size+offset)
-    record.slice!(record.index("\0")..-1)
 
-    @iter_pos += record.size unless @iter_pos.nil?
+    return nil unless record
+
+    record.slice!(record.index("\0")..-1) if record.index("\0")
+
+    @iter_pos += record.size + 1 unless @iter_pos.nil?
 
     # AS####, Description
     # REVISIT: Text is in Latin-1 (ISO8859-1)
